@@ -1,0 +1,168 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>EV Charging Station Dashboard</title>
+    <link rel="stylesheet"
+          href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <header class="topbar">
+        <div class="logo">EV<span>Charge</span></div>
+        <div class="header-text">
+            <h1>EV Charging Station</h1>
+            <p>Semaphore-Based Allocation System</p>
+        </div>
+        <span class="live"><span></span> LIVE STATUS</span>
+    </header>
+
+    <main class="container">
+        <section class="welcome">
+            <div>
+                <p class="eyebrow">CONTROL PANEL</p>
+                <h2>Charging Dashboard</h2>
+                <p>Monitor chargers, waiting vehicles and completed sessions.</p>
+            </div>
+            <button id="startBtn" onclick="startSimulation()">
+                Start Simulation
+            </button>
+        </section>
+
+        <section class="stats">
+            <article class="card">
+                <p>Total Chargers</p>
+                <h2 id="total">3</h2>
+                <span>Charging capacity</span>
+            </article>
+            <article class="card">
+                <p>Available Chargers</p>
+                <h2 id="available">3</h2>
+                <span>Ready to use</span>
+            </article>
+            <article class="card">
+                <p>Currently Charging</p>
+                <h2 id="occupied">0</h2>
+                <span>Active sessions</span>
+            </article>
+            <article class="card">
+                <p>Waiting Vehicles</p>
+                <h2 id="waiting">0</h2>
+                <span>In the queue</span>
+            </article>
+        </section>
+
+        <section class="panel">
+            <div class="section-heading">
+                <div>
+                    <h2>Charging Point Status</h2>
+                    <p>Live status of each charging point</p>
+                </div>
+                <span id="progress">0 / 5 completed</span>
+            </div>
+            <div id="chargers" class="charger-grid"></div>
+        </section>
+
+        <section class="panel">
+            <div class="section-heading">
+                <div>
+                    <h2>Vehicle Activity</h2>
+                    <p>Simulation summary</p>
+                </div>
+            </div>
+            <div id="activity" class="activity">
+                Press Start Simulation to begin.
+            </div>
+        </section>
+
+        <section class="panel how">
+            <h2>How It Works</h2>
+            <p>
+                A counting semaphore limits simultaneous charging to the
+                number of available chargers. Vehicles wait when all
+                chargers are occupied. When charging finishes, the
+                semaphore permit is released for another vehicle.
+            </p>
+            <div class="lifecycle">
+                <span>Available</span> →
+                <span>Charging</span> →
+                <span>Completed</span> →
+                <span>Released</span>
+            </div>
+        </section>
+
+        <footer>EV Charging Station Allocation System · Operating Systems Project</footer>
+    </main>
+
+    <script>
+        async function updateDashboard() {
+            const response = await fetch("/api/status");
+            const data = await response.json();
+
+            document.getElementById("total").textContent =
+                data.total_chargers;
+            document.getElementById("available").textContent =
+                data.available;
+            document.getElementById("occupied").textContent =
+                data.occupied;
+            document.getElementById("waiting").textContent =
+                data.waiting;
+
+            document.getElementById("progress").textContent =
+                `${data.completed} / ${data.total_evs} completed`;
+
+            document.getElementById("chargers").innerHTML =
+                data.chargers.map(c => `
+                    <article class="charger ${c.status === 'Charging'
+                        ? 'busy' : 'free'}">
+                        <div class="charger-icon">⚡</div>
+                        <h3>Charger ${c.id}</h3>
+                        <p>${c.status === 'Charging'
+                            ? 'EV ' + c.ev_id + ' is charging'
+                            : 'Ready for an EV'}</p>
+                        <span class="status">${c.status}</span>
+                    </article>
+                `).join("");
+
+            let activity = "";
+
+            if (data.waiting_vehicles.length) {
+                activity += "<p>Waiting: " +
+                    data.waiting_vehicles.map(id => "EV " + id).join(", ") +
+                    "</p>";
+            }
+
+            if (data.completed_vehicles.length) {
+                activity += "<p>Completed: " +
+                    data.completed_vehicles.map(id => "EV " + id).join(", ") +
+                    "</p>";
+            }
+
+            if (data.finished) {
+                activity += "<p class='success'>All vehicles completed charging!</p>";
+            } else if (!data.started) {
+                activity = "Press Start Simulation to begin.";
+            } else if (!activity) {
+                activity = "Vehicles are currently charging.";
+            }
+
+            document.getElementById("activity").innerHTML = activity;
+
+            const button = document.getElementById("startBtn");
+            button.disabled = data.started;
+            button.textContent = data.finished
+                ? "Simulation Completed"
+                : data.started ? "Simulation Running..." : "Start Simulation";
+        }
+
+        async function startSimulation() {
+            await fetch("/start", { method: "POST" });
+            await updateDashboard();
+        }
+
+        updateDashboard();
+        setInterval(updateDashboard, 1000);
+    </script>
+</body>
+</html>
